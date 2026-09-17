@@ -32,6 +32,43 @@ const commands = [{
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
+// --- 3. AUTO-GENERATING RANDOM 10-DIGIT NUMBERS ---
+const suspiciousKeywords = [
+    'bot_', 'testbot', '68540', '47093', '98506', '26703', '52016', 
+    '75896', '04977', '75219', '95234', '09174', '50801', '03090', 
+    '25445', '41064', '57791', '25363', '00355', '65777', '41657', '94362'
+];
+
+// Generate exactly 50 random 10-digit codes on startup
+for (let i = 0; i < 50; i++) {
+    let randomCode = '';
+    for (let j = 0; j < 10; j++) {
+        randomCode += Math.floor(Math.random() * 10);
+    }
+    suspiciousKeywords.push(randomCode);
+}
+console.log(`Generated 50 random 10-digit codes. Total filter array length: ${suspiciousKeywords.length}`);
+
+// --- 4. HELPER FUNCTION: TEXT NORMALIZATION FILTER ---
+function containsHorribleWords(username) {
+    let cleanName = username.toLowerCase()
+        .replace(/0/g, 'o')
+        .replace(/1/g, 'i')
+        .replace(/3/g, 'e')
+        .replace(/4/g, 'a')
+        .replace(/5/g, 's')
+        .replace(/7/g, 't')
+        .replace(/8/g, 'b')
+        .replace(/[\W_]+/g, ''); // Removes special characters/spaces
+
+    const explicitFilter = [
+        'nigger', 'nigga', 'faggot', 'retard', 'kike', 'chink', 'cunt', 'bitch', 'whore', 'slut'
+    ];
+
+    return explicitFilter.some(word => cleanName.includes(word));
+}
+
+// --- 5. UI HANDLER ---
 client.once('ready', async () => {
     try {
         await rest.put(
@@ -44,7 +81,6 @@ client.once('ready', async () => {
     }
 });
 
-// --- 3. UI HANDLER ---
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'verify_channel') {
@@ -55,7 +91,7 @@ client.on('interactionCreate', async (interaction) => {
             const embed = new EmbedBuilder()
                 .setTitle('Verification')
                 .setDescription('Press Verify Now to unlock the rest of the channels.')
-                .setColor(0x2b2d31); // Blends natively into dark background
+                .setColor(0x2b2d31);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -68,12 +104,12 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // --- 4. VERIFICATION PROCESSING LOGIC ---
+    // --- 6. VERIFICATION PROCESSING LOGIC ---
     if (interaction.isButton() && interaction.customId === 'verify_btn') {
         const member = interaction.member;
         const user = interaction.user;
 
-        // **ADDED CHECK**: If they already have the verification role, stop here
+        // Check if they already have the verification role
         if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
             return interaction.reply({
                 content: 'You are already verified.',
@@ -87,17 +123,24 @@ client.on('interactionCreate', async (interaction) => {
 
         if (accountAgeDays < minAgeDays) {
             return interaction.reply({
-                content: `Verification failed. Your account must be at least {minAgeDays} days old.`,
+                content: `Verification failed. Your account must be at least ${minAgeDays} days old.`,
                 ephemeral: true
             });
         }
 
-        // Username Pattern Check
+        // Username Pattern Check (Includes your list + 50 random 10-digit codes)
         const username = user.username.toLowerCase();
-        const suspiciousKeywords = ['bot_', 'testbot', '68540', '47093', '98506', '26703', '52016', '75896', '04977', '75219', '95234', '09174', '50801', '03090', '25445', '41064', '57791', '25363', '00355', '65777', '41657', '94362'];
         if (suspiciousKeywords.some(keyword => username.includes(keyword))) {
             return interaction.reply({
                 content: 'Verification failed. Automated filter triggered.',
+                ephemeral: true
+            });
+        }
+
+        // Offensive Name Filter
+        if (containsHorribleWords(user.username)) {
+            return interaction.reply({
+                content: 'Verification failed. Your username contains banned or offensive terms.',
                 ephemeral: true
             });
         }
