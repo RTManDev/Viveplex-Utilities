@@ -39,7 +39,6 @@ const suspiciousKeywords = [
     '25445', '41064', '57791', '25363', '00355', '65777', '41657', '94362'
 ];
 
-// Generate exactly 50 random 10-digit codes on startup
 for (let i = 0; i < 50; i++) {
     let randomCode = '';
     for (let j = 0; j < 10; j++) {
@@ -47,7 +46,6 @@ for (let i = 0; i < 50; i++) {
     }
     suspiciousKeywords.push(randomCode);
 }
-console.log(`Generated 50 random 10-digit codes. Total filter array length: ${suspiciousKeywords.length}`);
 
 // --- 4. HELPER FUNCTION: TEXT NORMALIZATION FILTER ---
 function containsHorribleWords(username) {
@@ -59,7 +57,7 @@ function containsHorribleWords(username) {
         .replace(/5/g, 's')
         .replace(/7/g, 't')
         .replace(/8/g, 'b')
-        .replace(/[\W_]+/g, ''); // Removes special characters/spaces
+        .replace(/[\W_]+/g, '');
 
     const explicitFilter = [
         'nigger', 'nigga', 'faggot', 'retard', 'kike', 'chink', 'cunt', 'bitch', 'whore', 'slut'
@@ -88,19 +86,24 @@ client.on('interactionCreate', async (interaction) => {
                 return interaction.reply({ content: "You don't have permission to access this command.", ephemeral: true });
             }
 
+            // Using fetchReply: true allows us to edit or delete the prompt later if needed
+            await interaction.deferReply({ ephemeral: true });
+            await interaction.deleteReply();
+
             const embed = new EmbedBuilder()
                 .setTitle('Verification')
                 .setDescription('Press Verify Now to unlock the rest of the channels.')
-                .setColor(0x2b2d31);
+                .setColor(0x2b2d31); // Blends completely with Discord dark theme background
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('verify_btn')
                     .setLabel('Verify Now')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Primary) // Blurple color button
             );
 
-            await interaction.reply({ embeds: [embed], components: [row] });
+            // Send to channel directly without making it ephemeral, matching your image look
+            await interaction.channel.send({ embeds: [embed], components: [row] });
         }
     }
 
@@ -109,7 +112,6 @@ client.on('interactionCreate', async (interaction) => {
         const member = interaction.member;
         const user = interaction.user;
 
-        // Check if they already have the verification role
         if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
             return interaction.reply({
                 content: 'You are already verified.',
@@ -117,7 +119,6 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
 
-        // Account Age Metric Check (7 Days minimum limit)
         const minAgeDays = 7;
         const accountAgeDays = (Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24);
 
@@ -128,7 +129,6 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
 
-        // Username Pattern Check (Includes your list + 50 random 10-digit codes)
         const username = user.username.toLowerCase();
         if (suspiciousKeywords.some(keyword => username.includes(keyword))) {
             return interaction.reply({
@@ -137,7 +137,6 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
 
-        // Offensive Name Filter
         if (containsHorribleWords(user.username)) {
             return interaction.reply({
                 content: 'Verification failed. Your username contains banned or offensive terms.',
@@ -145,7 +144,6 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
 
-        // Assign Role
         const role = interaction.guild.roles.cache.get(VERIFIED_ROLE_ID);
         if (!role) return interaction.reply({ content: 'Role configuration missing.', ephemeral: true });
 
@@ -159,3 +157,4 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.login(TOKEN);
+
