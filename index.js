@@ -10,11 +10,34 @@ const {
 } = require('discord.js');
 const express = require('express');
 
-// --- 1. WEB SERVER KEEPALIVE FOR RENDER ---
+// --- 1. WEB SERVER KEEPALIVE & SELF-PINGER FOR RENDER ---
 const app = express();
 const PORT = process.env.PORT || 8080;
-app.get('/', (req, res) => res.send('Bot is active!'));
-app.listen(PORT);
+const SITE_URL = process.env.RENDER_EXTERNAL_URL || `https://${process.env.RENDER_SERVICE_NAME}.onrender.com`;
+
+app.get('/', (req, res) => {
+    res.send('Bot is active!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Web server listening on port ${PORT}`);
+    
+    // Automatically start pinging every 5 minutes (300,000 milliseconds)
+    if (SITE_URL && !SITE_URL.includes('undefined')) {
+        console.log(`Self-ping initialization started for: ${SITE_URL}`);
+        setInterval(async () => {
+            try {
+                // Dynamically use native fetch available in Node.js v18+
+                const response = await fetch(SITE_URL);
+                console.log(`[Ping] Keep-alive successful. Status: ${response.status} at ${new Date().toISOString()}`);
+            } catch (error) {
+                console.error('[Ping Error] Failed to ping server:', error.message);
+            }
+        }, 300000); 
+    } else {
+        console.log('⚠️ [Warning] RENDER_EXTERNAL_URL environment variable is missing. Self-ping skipped.');
+    }
+});
 
 // --- 2. CONFIGURATION ---
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -86,23 +109,21 @@ client.on('interactionCreate', async (interaction) => {
                 return interaction.reply({ content: "You don't have permission to access this command.", ephemeral: true });
             }
 
-            // Using fetchReply: true allows us to edit or delete the prompt later if needed
             await interaction.deferReply({ ephemeral: true });
             await interaction.deleteReply();
 
             const embed = new EmbedBuilder()
                 .setTitle('Verification')
                 .setDescription('Press Verify Now to unlock the rest of the channels.')
-                .setColor(0x2b2d31); // Blends completely with Discord dark theme background
+                .setColor(0x2b2d31);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('verify_btn')
                     .setLabel('Verify Now')
-                    .setStyle(ButtonStyle.Primary) // Blurple color button
+                    .setStyle(ButtonStyle.Primary)
             );
 
-            // Send to channel directly without making it ephemeral, matching your image look
             await interaction.channel.send({ embeds: [embed], components: [row] });
         }
     }
@@ -157,4 +178,3 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.login(TOKEN);
-
