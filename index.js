@@ -80,38 +80,49 @@ client.once('ready', async () => {
     }
 });
 
-// --- 5. SOCIAL MEDIA EMBED ENGINE (CHANNEL RESTRICTED) ---
+// --- 5. SOCIAL MEDIA EMBED ENGINE (KEEP LINK + VIDEO PREVIEW) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
 
+    // Matches standard streaming links
     const mediaRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|tiktok\.com|twitch\.tv|instagram\.com|twitter\.com|x\.com)\/\S+)/i;
     const match = message.content.match(mediaRegex);
 
     if (match) {
         const targetUrl = match[0];
 
+        // Delete raw unformatted text prompt
         try {
             await message.delete();
         } catch (err) {
-            console.error('Missing Manage Messages permission to hide raw text strings.', err.message);
+            console.error('Missing Manage Messages permission.', err.message);
         }
 
-        const titleLabel = message.content.replace(targetUrl, '').trim() || "Shared Video Link";
+        // Clean out the URL from text to extract the title context
+        const userProvidedTitle = message.content.replace(targetUrl, '').trim() || "Shared Video";
+
+        // This matches the text spacing from your reference layout:
+        // Line 1: User's title tag (e.g. [🔴 LIVE | Just Playing Roblox])
+        // Line 2: Explicit clickable raw text link path wrapped in parentheses
+        const formattedDescription = `**${userProvidedTitle}**\n(${targetUrl})`;
 
         const mediaEmbed = new EmbedBuilder()
-            .setTitle(titleLabel)
-            .setURL(targetUrl) 
-            .setColor(0xcc181e); 
+            .setDescription(formattedDescription)
+            .setColor(0x2b2d31); // Seamless grey frame box container layout
 
         const actionRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setLabel('Watch Video')
                 .setURL(targetUrl)
-                .setStyle(ButtonStyle.Link) 
+                .setStyle(ButtonStyle.Link)
         );
 
+        // Sending the text embed with the action button.
+        // Also appending the raw link text outside the embed field at the end of the post array. 
+        // This forces Discord's internal browser scraper to append its native rich video player frame automatically right beneath the layout.
         await message.channel.send({
+            content: targetUrl, 
             embeds: [mediaEmbed],
             components: [actionRow]
         });
@@ -122,7 +133,6 @@ client.on('messageCreate', async (message) => {
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'verify_channel') {
-            // **UPDATED CHECK**: Verifies if the person calling the command is strictly the server owner
             if (interaction.user.id !== interaction.guild.ownerId) {
                 return interaction.reply({ 
                     content: "❌ This setup command can only be executed by the server owner.", 
