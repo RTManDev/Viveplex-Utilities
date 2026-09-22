@@ -84,7 +84,7 @@ client.once('ready', async () => {
     }
 });
 
-// --- 6. SOCIAL MEDIA EMBED ENGINE (HEADER LINK HYPERLINK + SMALL TIMESTAMP) ---
+// --- 6. SOCIAL MEDIA EMBED ENGINE (YOUTUBE SCRAMBLER WITH AUTO TITLE CAPTURE) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -93,7 +93,7 @@ client.on('messageCreate', async (message) => {
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match[1]; // Extract valid exact string URL sequence matching capture brackets
+        const targetUrl = match[0]; 
 
         try {
             await message.delete();
@@ -101,20 +101,31 @@ client.on('messageCreate', async (message) => {
             console.error('Missing Manage Messages permission in channel settings.', err.message);
         }
 
-        // Extract description text context by wiping out URL segments from strings
-        const customTitle = message.content.replace(targetUrl, '').trim() || "Shared Video Link";
+        let videoTitle = "Watch Shared Video Link"; // Fallback text
 
-        // Formats line as a massive Markdown heading (##) with masked hyperlink structure
-        // Looks exactly like: ## [Your Custom Text Title Here](https://youtube.com...)
-        const markdownHeaderContent = `## [${customTitle}](${targetUrl})`;
+        // Extract metadata via NoEmbed framework if the target matches a YouTube path link string sequence
+        if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
+            try {
+                const response = await fetch(`https://noembed.com/embed?dataType=json&url=${encodeURIComponent(targetUrl)}`);
+                const data = await response.json();
+                if (data.title) {
+                    videoTitle = data.title;
+                }
+            } catch (err) {
+                console.error('Metadata lookup pipeline timeout:', err.message);
+            }
+        }
 
-        // 1. Post text header element with the raw text link payload appended silently.
-        // The hidden terminal targetUrl string forces Discord's native media scraper engine to append the large video block player.
-        await message.channel.send({ content: `${markdownHeaderContent}\n${targetUrl}` });
+        // Formats your exact required structure: ## [Fetched Video Name](https://youtube.com/...)
+        const maskedMarkdownHeader = `## [${videoTitle}](${targetUrl})`;
 
-        // Calculate Unix timeline context integer
+        // Post the text structure header with targetUrl appended.
+        // This forces Discord's native backend web scraper to auto-unfurl the large media card player.
+        await message.channel.send({ content: `${maskedMarkdownHeader}\n${targetUrl}` });
+
+        // Generate Unix timing string
         const unixTimestamp = Math.floor(Date.now() / 1000);
-        // Formats relative text size down using ### header markers
+        // Formats down compact text matching relative size instructions using ### header parameters
         const compactTimestampText = `### <t:${unixTimestamp}:R>`;
 
         const actionRow = new ActionRowBuilder().addComponents(
@@ -124,7 +135,7 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
-        // 2. Post timestamp tracking segment directly stacked over the interaction row button layout frame
+        // Post the timestamp text and link button directly below the media card preview
         await message.channel.send({
             content: compactTimestampText,
             components: [actionRow]
