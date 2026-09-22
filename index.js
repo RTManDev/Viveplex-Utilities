@@ -80,17 +80,16 @@ client.once('ready', async () => {
     }
 });
 
-// --- 5. SOCIAL MEDIA EMBED ENGINE (NATIVE DISCORD MEDIA CARD + BUTTON) ---
+// --- 5. SOCIAL MEDIA EMBED ENGINE (NATIVE CARD + RELATIVE TIMESTAMP + BUTTON) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
 
-    // Matches streaming links
     const mediaRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|tiktok\.com|twitch\.tv|instagram\.com|twitter\.com|x\.com)\/\S+)/i;
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match[1];
+        const targetUrl = match;
 
         // Delete raw unformatted user chat entry right away
         try {
@@ -102,15 +101,21 @@ client.on('messageCreate', async (message) => {
         // Isolate the text description by clearing out the URL link segment
         const customTitle = message.content.replace(targetUrl, '').trim();
 
-        // Format message payload layout matching your first image:
-        // Line 1: Custom title context text (if provided by user, else empty spacer)
-        // Line 2: Explicit plain text address line
-        let finalMessageContent = "";
+        // Format primary video header payload layout
+        let firstMessageContent = "";
         if (customTitle) {
-            finalMessageContent = `**${customTitle}**\n${targetUrl}`;
+            firstMessageContent = `**${customTitle}**\n${targetUrl}`;
         } else {
-            finalMessageContent = targetUrl;
+            firstMessageContent = targetUrl;
         }
+
+        // 1. Post the main video container so Discord's native media engine unfurls it
+        await message.channel.send({ content: firstMessageContent });
+
+        // 2. Calculate the Unix timestamp in seconds to create the relative field
+        const unixTimestamp = Math.floor(Date.now() / 1000);
+        // Discord's :R flag converts a Unix integer into an updating "3 minutes ago" text string
+        const relativeTimeMarkdown = `<t:${unixTimestamp}:R>`;
 
         // Construct standard redirect hyperlink UI element
         const actionRow = new ActionRowBuilder().addComponents(
@@ -120,10 +125,9 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
-        // Sending plain text with the targetUrl triggers Discord's 
-        // native rich preview frame engine automatically right over the action button
+        // 3. Send the secondary follow-up item to space the text above the button row
         await message.channel.send({
-            content: finalMessageContent,
+            content: relativeTimeMarkdown,
             components: [actionRow]
         });
     }
@@ -186,4 +190,4 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-client.login(TOKEN);
+client.login(TOKEN);/
