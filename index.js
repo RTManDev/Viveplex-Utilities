@@ -68,7 +68,7 @@ function containsHorribleWords(username) {
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
-        console.log(`Bot logged in as ${client.user.tag}. Application metadata sync complete.`);
+        console.log(`Bot logged in as ${client.user.tag}.`);
         
         if (SITE_URL && !SITE_URL.includes('undefined')) {
             setInterval(async () => {
@@ -84,7 +84,7 @@ client.once('ready', async () => {
     }
 });
 
-// --- 6. SOCIAL MEDIA EMBED ENGINE (URL COMPLETELY HIDDEN VIA IMAGE COMPONENT) ---
+// --- 6. SOCIAL MEDIA EMBED ENGINE (PERFECT INVISIBLE PREVIEW CODES) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -93,46 +93,47 @@ client.on('messageCreate', async (message) => {
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match[1]; 
+        const targetUrl = match[1]; // Safely get URL match string
 
         try {
             await message.delete();
         } catch (err) {
-            console.error('Missing Manage Messages permission in channel settings.', err.message);
+            console.error('Missing Manage Messages permission.', err.message);
         }
 
-        let videoTitle = "Watch Shared Video Link"; 
-        let thumbnailUrl = "";
+        let videoTitle = "";
 
-        // Auto Title & Thumbnail Image extraction via open oEmbed Standard
+        // Safely fetch YouTube Title metadata using official fallback format hooks
         if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
             try {
                 const response = await fetch(`https://noembed.com{encodeURIComponent(targetUrl)}`);
                 const data = await response.json();
-                if (data.title) videoTitle = data.title;
-                if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
+                if (data.title) {
+                    videoTitle = data.title;
+                }
             } catch (err) {
-                console.error('Metadata lookup pipeline timeout:', err.message);
+                console.error('Title fetch failed:', err.message);
             }
         }
 
-        // Formats your exact markdown hyperlink syntax: ## [Video Title](URL)
-        const maskedMarkdownHeader = `## [${videoTitle}](${targetUrl})`;
-
-        // Build a custom borderless block wrapper frame
-        const videoCardEmbed = new EmbedBuilder()
-            .setAuthor({ name: 'YouTube', iconURL: 'https://youtube.com' })
-            .setDescription(maskedMarkdownHeader)
-            .setColor(0x2b2d31); // Seamless native discord gray theme
-
-        // If a thumbnail image exists, bind it directly to the card layer.
-        // This displays the massive video image cleanly without showing raw text url codes!
-        if (thumbnailUrl) {
-            videoCardEmbed.setImage(thumbnailUrl);
+        // If no title was detected or provided, fallback nicely
+        if (!videoTitle) {
+            videoTitle = message.content.replace(targetUrl, '').trim() || "Shared Video";
         }
 
-        // Generate Unix timestamp for the subtitle layout
+        // --- THE INVISIBLE LINK SYSTEM ---
+        // 1. We create the large title header row using ##
+        // 2. We append a zero-width space hyperlink right next to it: [ ](targetUrl)
+        // This makes the raw URL characters completely disappear while forcing Discord to fetch the preview card player!
+        const invisibleEmbedCode = `[ ](${targetUrl})`;
+        const finalMessageLayout = `## ${videoTitle}${invisibleEmbedCode}`;
+
+        // Send the title and invisible link anchor code to generate the massive native player layout
+        await message.channel.send({ content: finalMessageLayout });
+
+        // Generate Unix timing string
         const unixTimestamp = Math.floor(Date.now() / 1000);
+        // Formats relative time size down to a small header row using ###
         const compactTimestampText = `### <t:${unixTimestamp}:R>`;
 
         const actionRow = new ActionRowBuilder().addComponents(
@@ -142,12 +143,7 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
-        // Send everything together as one message block
-        await message.channel.send({ 
-            embeds: [videoCardEmbed] 
-        });
-
-        // Send the relative clock string and link interaction row right below it
+        // Send the small timestamp text and link button directly below the large video block player
         await message.channel.send({
             content: compactTimestampText,
             components: [actionRow]
