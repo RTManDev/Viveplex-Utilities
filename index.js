@@ -84,7 +84,7 @@ client.once('ready', async () => {
     }
 });
 
-// --- 6. SOCIAL MEDIA EMBED ENGINE (YOUTUBE SCRAMBLER WITH AUTO TITLE CAPTURE) ---
+// --- 6. SOCIAL MEDIA EMBED ENGINE (HIDDEN URL TRICK + NATIVE CARD PLAYER) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -93,7 +93,7 @@ client.on('messageCreate', async (message) => {
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match[0]; 
+        const targetUrl = match[1]; 
 
         try {
             await message.delete();
@@ -101,12 +101,12 @@ client.on('messageCreate', async (message) => {
             console.error('Missing Manage Messages permission in channel settings.', err.message);
         }
 
-        let videoTitle = "Watch Shared Video Link"; // Fallback text
+        let videoTitle = "Watch Shared Video Link"; 
 
-        // Extract metadata via NoEmbed framework if the target matches a YouTube path link string sequence
+        // Auto Title Fetching
         if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
             try {
-                const response = await fetch(`https://noembed.com/embed?dataType=json&url=${encodeURIComponent(targetUrl)}`);
+                const response = await fetch(`https://noembed.com{encodeURIComponent(targetUrl)}`);
                 const data = await response.json();
                 if (data.title) {
                     videoTitle = data.title;
@@ -116,16 +116,19 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // Formats your exact required structure: ## [Fetched Video Name](https://youtube.com/...)
+        // Formats your exact required structure: ## [Video Title](URL)
         const maskedMarkdownHeader = `## [${videoTitle}](${targetUrl})`;
 
-        // Post the text structure header with targetUrl appended.
-        // This forces Discord's native backend web scraper to auto-unfurl the large media card player.
-        await message.channel.send({ content: `${maskedMarkdownHeader}\n${targetUrl}` });
+        // **THE TRICK**: We append the raw link wrapped inside a zero-width spoiler indicator || ||
+        // Discord reads the link to build the big media frame, but hides the raw letters completely from the chat block!
+        const hiddenLinkString = `||${targetUrl}||`;
+
+        // 1. Post text header element with the hidden spoiler link payload
+        await message.channel.send({ content: `${maskedMarkdownHeader}\n${hiddenLinkString}` });
 
         // Generate Unix timing string
         const unixTimestamp = Math.floor(Date.now() / 1000);
-        // Formats down compact text matching relative size instructions using ### header parameters
+        // Formats relative time size down using ### parameters
         const compactTimestampText = `### <t:${unixTimestamp}:R>`;
 
         const actionRow = new ActionRowBuilder().addComponents(
@@ -135,7 +138,7 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
-        // Post the timestamp text and link button directly below the media card preview
+        // 2. Post timestamp text and link button directly below the media player block
         await message.channel.send({
             content: compactTimestampText,
             components: [actionRow]
