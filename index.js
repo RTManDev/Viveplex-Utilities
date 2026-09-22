@@ -10,14 +10,13 @@ const {
 } = require('discord.js');
 const express = require('express');
 
-// --- 1. ROBUST WEB SERVER BINDING FOR RENDER ---
+// --- 1. WEB SERVER KEEPALIVE FOR RENDER ---
 const app = express();
-const PORT = process.env.PORT || 10000; // Render's native web fallback port
+const PORT = process.env.PORT || 10000;
 const SITE_URL = process.env.RENDER_EXTERNAL_URL;
 
 app.get('/', (req, res) => res.status(200).send('Bot is active and healthy!'));
 
-// Render requires binding explicitly to 0.0.0.0 to clear network checks
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Web listener securely attached to port ${PORT}`);
 });
@@ -71,24 +70,21 @@ client.once('ready', async () => {
         await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
         console.log(`Bot logged in as ${client.user.tag}. Application metadata sync complete.`);
         
-        // Start self-pings safely only after the bot initializes
         if (SITE_URL && !SITE_URL.includes('undefined')) {
-            console.log(`Pinger active targeting link address: ${SITE_URL}`);
             setInterval(async () => {
                 try {
-                    const res = await fetch(SITE_URL);
-                    console.log(`[KeepAlive] Heartbeat check code: ${res.status}`);
+                    await fetch(SITE_URL);
                 } catch (e) {
                     console.error('[KeepAlive Error] Traffic skip:', e.message);
                 }
-            }, 300000); // 5-minute loops
+            }, 300000); 
         }
     } catch (error) {
         console.error('Initialization Error:', error);
     }
 });
 
-// --- 6. SOCIAL MEDIA EMBED ENGINE (NATIVE CARD + RELATIVE TIMESTAMP + BUTTON) ---
+// --- 6. SOCIAL MEDIA EMBED ENGINE (HEADER LINK HYPERLINK + SMALL TIMESTAMP) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -97,7 +93,7 @@ client.on('messageCreate', async (message) => {
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match[0];
+        const targetUrl = match[1]; // Extract valid exact string URL sequence matching capture brackets
 
         try {
             await message.delete();
@@ -105,19 +101,21 @@ client.on('messageCreate', async (message) => {
             console.error('Missing Manage Messages permission in channel settings.', err.message);
         }
 
-        const customTitle = message.content.replace(targetUrl, '').trim();
+        // Extract description text context by wiping out URL segments from strings
+        const customTitle = message.content.replace(targetUrl, '').trim() || "Shared Video Link";
 
-        let firstMessageContent = "";
-        if (customTitle) {
-            firstMessageContent = `**${customTitle}**\n${targetUrl}`;
-        } else {
-            firstMessageContent = targetUrl;
-        }
+        // Formats line as a massive Markdown heading (##) with masked hyperlink structure
+        // Looks exactly like: ## [Your Custom Text Title Here](https://youtube.com...)
+        const markdownHeaderContent = `## [${customTitle}](${targetUrl})`;
 
-        await message.channel.send({ content: firstMessageContent });
+        // 1. Post text header element with the raw text link payload appended silently.
+        // The hidden terminal targetUrl string forces Discord's native media scraper engine to append the large video block player.
+        await message.channel.send({ content: `${markdownHeaderContent}\n${targetUrl}` });
 
+        // Calculate Unix timeline context integer
         const unixTimestamp = Math.floor(Date.now() / 1000);
-        const relativeTimeMarkdown = `<t:${unixTimestamp}:R>`;
+        // Formats relative text size down using ### header markers
+        const compactTimestampText = `### <t:${unixTimestamp}:R>`;
 
         const actionRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -126,8 +124,9 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
+        // 2. Post timestamp tracking segment directly stacked over the interaction row button layout frame
         await message.channel.send({
-            content: relativeTimeMarkdown,
+            content: compactTimestampText,
             components: [actionRow]
         });
     }
