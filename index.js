@@ -10,22 +10,16 @@ const {
 } = require('discord.js');
 const express = require('express');
 
-// --- 1. WEB SERVER KEEPALIVE & SELF-PINGER FOR RENDER ---
+// --- 1. ROBUST WEB SERVER BINDING FOR RENDER ---
 const app = express();
-const PORT = process.env.PORT || 8080;
-const SITE_URL = process.env.RENDER_EXTERNAL_URL || `https://${process.env.RENDER_SERVICE_NAME}.onrender.com`;
+const PORT = process.env.PORT || 10000; // Render's native web fallback port
+const SITE_URL = process.env.RENDER_EXTERNAL_URL;
 
-app.get('/', (req, res) => res.send('Bot is active!'));
-app.listen(PORT, () => {
-    if (SITE_URL && !SITE_URL.includes('undefined')) {
-        setInterval(async () => {
-            try {
-                await fetch(SITE_URL);
-            } catch (e) {
-                console.error('[Ping Error] Failed to ping:', e.message);
-            }
-        }, 300000); 
-    }
+app.get('/', (req, res) => res.status(200).send('Bot is active and healthy!'));
+
+// Render requires binding explicitly to 0.0.0.0 to clear network checks
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Web listener securely attached to port ${PORT}`);
 });
 
 // --- 2. CONFIGURATION ---
@@ -71,16 +65,30 @@ function containsHorribleWords(username) {
     return explicitFilter.some(word => cleanName.includes(word));
 }
 
+// --- 5. INITIALIZATION & LIVE KEEP-ALIVE ---
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
-        console.log('Bot running seamlessly with live URL formatting initialized.');
+        console.log(`Bot logged in as ${client.user.tag}. Application metadata sync complete.`);
+        
+        // Start self-pings safely only after the bot initializes
+        if (SITE_URL && !SITE_URL.includes('undefined')) {
+            console.log(`Pinger active targeting link address: ${SITE_URL}`);
+            setInterval(async () => {
+                try {
+                    const res = await fetch(SITE_URL);
+                    console.log(`[KeepAlive] Heartbeat check code: ${res.status}`);
+                } catch (e) {
+                    console.error('[KeepAlive Error] Traffic skip:', e.message);
+                }
+            }, 300000); // 5-minute loops
+        }
     } catch (error) {
-        console.error(error);
+        console.error('Initialization Error:', error);
     }
 });
 
-// --- 5. SOCIAL MEDIA EMBED ENGINE (NATIVE CARD + RELATIVE TIMESTAMP + BUTTON) ---
+// --- 6. SOCIAL MEDIA EMBED ENGINE (NATIVE CARD + RELATIVE TIMESTAMP + BUTTON) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -89,19 +97,16 @@ client.on('messageCreate', async (message) => {
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match;
+        const targetUrl = match[0];
 
-        // Delete raw unformatted user chat entry right away
         try {
             await message.delete();
         } catch (err) {
-            console.error('Missing Manage Messages permission.', err.message);
+            console.error('Missing Manage Messages permission in channel settings.', err.message);
         }
 
-        // Isolate the text description by clearing out the URL link segment
         const customTitle = message.content.replace(targetUrl, '').trim();
 
-        // Format primary video header payload layout
         let firstMessageContent = "";
         if (customTitle) {
             firstMessageContent = `**${customTitle}**\n${targetUrl}`;
@@ -109,15 +114,11 @@ client.on('messageCreate', async (message) => {
             firstMessageContent = targetUrl;
         }
 
-        // 1. Post the main video container so Discord's native media engine unfurls it
         await message.channel.send({ content: firstMessageContent });
 
-        // 2. Calculate the Unix timestamp in seconds to create the relative field
         const unixTimestamp = Math.floor(Date.now() / 1000);
-        // Discord's :R flag converts a Unix integer into an updating "3 minutes ago" text string
         const relativeTimeMarkdown = `<t:${unixTimestamp}:R>`;
 
-        // Construct standard redirect hyperlink UI element
         const actionRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setLabel('Watch Video')
@@ -125,7 +126,6 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
-        // 3. Send the secondary follow-up item to space the text above the button row
         await message.channel.send({
             content: relativeTimeMarkdown,
             components: [actionRow]
@@ -133,7 +133,7 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// --- 6. CORE COMMANDS & VERIFICATION MANAGEMENT ---
+// --- 7. CORE COMMANDS & VERIFICATION MANAGEMENT ---
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'verify_channel') {
@@ -190,4 +190,4 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-client.login(TOKEN);/
+client.login(TOKEN);
