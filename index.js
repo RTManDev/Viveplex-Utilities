@@ -32,13 +32,14 @@ app.listen(PORT, () => {
 const TOKEN = process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
+const MEDIA_CHANNEL_ID = process.env.MEDIA_CHANNEL_ID; 
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessages,   // REQUIRED FOR SCANNERS
-        GatewayIntentBits.MessageContent   // REQUIRED FOR SCANNERS
+        GatewayIntentBits.GuildMessages,   
+        GatewayIntentBits.MessageContent   
     ]
 });
 
@@ -79,43 +80,37 @@ client.once('ready', async () => {
     }
 });
 
-// --- 5. SOCIAL MEDIA EMBED ENGINE ---
+// --- 5. SOCIAL MEDIA EMBED ENGINE (CHANNEL RESTRICTED) ---
 client.on('messageCreate', async (message) => {
-    // Ignore bots to avoid crash loops
     if (message.author.bot) return;
+    if (message.channel.id !== MEDIA_CHANNEL_ID) return;
 
-    // Regular Expression matching popular media networks (YouTube, TikTok, Twitch, Instagram, Twitter/X)
     const mediaRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|tiktok\.com|twitch\.tv|instagram\.com|twitter\.com|x\.com)\/\S+)/i;
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match[1];
+        const targetUrl = match[0];
 
-        // 1. Delete original user post right away to hide text links completely
         try {
             await message.delete();
         } catch (err) {
             console.error('Missing Manage Messages permission to hide raw text strings.', err.message);
         }
 
-        // 2. Format title text matching reference graphic pattern: [🔴 LIVE | Channel Name] or fallback string
         const titleLabel = message.content.replace(targetUrl, '').trim() || "Shared Video Link";
 
-        // 3. Construct custom layout frame
         const mediaEmbed = new EmbedBuilder()
             .setTitle(titleLabel)
-            .setURL(targetUrl) // Couples backlink validation inside embed system logic
-            .setColor(0xcc181e); // YouTube brand matching red sidebar color highlight
+            .setURL(targetUrl) 
+            .setColor(0xcc181e); 
 
-        // 4. Create action button targeting the stream landing destination
         const actionRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setLabel('Watch Video')
                 .setURL(targetUrl)
-                .setStyle(ButtonStyle.Link) // Link style embeds structural external icon automatically
+                .setStyle(ButtonStyle.Link) 
         );
 
-        // 5. Send formatted panel frame to the room channel mesh
         await message.channel.send({
             embeds: [mediaEmbed],
             components: [actionRow]
@@ -127,9 +122,14 @@ client.on('messageCreate', async (message) => {
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'verify_channel') {
-            if (!interaction.member.permissions.has('Administrator')) {
-                return interaction.reply({ content: "You don't have permission to access this command.", ephemeral: true });
+            // **UPDATED CHECK**: Verifies if the person calling the command is strictly the server owner
+            if (interaction.user.id !== interaction.guild.ownerId) {
+                return interaction.reply({ 
+                    content: "❌ This setup command can only be executed by the server owner.", 
+                    ephemeral: true 
+                });
             }
+
             await interaction.deferReply({ ephemeral: true });
             await interaction.deleteReply();
 
