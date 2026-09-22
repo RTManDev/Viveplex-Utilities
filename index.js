@@ -84,7 +84,7 @@ client.once('ready', async () => {
     }
 });
 
-// --- 6. SOCIAL MEDIA EMBED ENGINE (COMPLETELY HIDDEN URL CODES) ---
+// --- 6. SOCIAL MEDIA EMBED ENGINE (URL COMPLETELY HIDDEN VIA IMAGE COMPONENT) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -102,33 +102,37 @@ client.on('messageCreate', async (message) => {
         }
 
         let videoTitle = "Watch Shared Video Link"; 
+        let thumbnailUrl = "";
 
-        // Auto Title Fetching from YouTube
+        // Auto Title & Thumbnail Image extraction via open oEmbed Standard
         if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
             try {
                 const response = await fetch(`https://noembed.com{encodeURIComponent(targetUrl)}`);
                 const data = await response.json();
-                if (data.title) {
-                    videoTitle = data.title;
-                }
+                if (data.title) videoTitle = data.title;
+                if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
             } catch (err) {
                 console.error('Metadata lookup pipeline timeout:', err.message);
             }
         }
 
-        // Formats your precise required structure: ## [Video Title](URL)
+        // Formats your exact markdown hyperlink syntax: ## [Video Title](URL)
         const maskedMarkdownHeader = `## [${videoTitle}](${targetUrl})`;
 
-        // **COMPLETELY HIDDEN:** Appending the URL wrapped inside <|| ||> blocks 
-        // forces Discord to generate the media frame box layout but ensures the text link is completely hidden.
-        const hiddenLinkPayload = `<||${targetUrl}||>`;
+        // Build a custom borderless block wrapper frame
+        const videoCardEmbed = new EmbedBuilder()
+            .setAuthor({ name: 'YouTube', iconURL: 'https://youtube.com' })
+            .setDescription(maskedMarkdownHeader)
+            .setColor(0x2b2d31); // Seamless native discord gray theme
 
-        // 1. Post text header element with the masked layout
-        await message.channel.send({ content: `${maskedMarkdownHeader} ${hiddenLinkPayload}` });
+        // If a thumbnail image exists, bind it directly to the card layer.
+        // This displays the massive video image cleanly without showing raw text url codes!
+        if (thumbnailUrl) {
+            videoCardEmbed.setImage(thumbnailUrl);
+        }
 
-        // Generate Unix timing string
+        // Generate Unix timestamp for the subtitle layout
         const unixTimestamp = Math.floor(Date.now() / 1000);
-        // Formats relative time size down using ### parameters
         const compactTimestampText = `### <t:${unixTimestamp}:R>`;
 
         const actionRow = new ActionRowBuilder().addComponents(
@@ -138,7 +142,12 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
-        // 2. Post timestamp text and link button directly below the media player block
+        // Send everything together as one message block
+        await message.channel.send({ 
+            embeds: [videoCardEmbed] 
+        });
+
+        // Send the relative clock string and link interaction row right below it
         await message.channel.send({
             content: compactTimestampText,
             components: [actionRow]
