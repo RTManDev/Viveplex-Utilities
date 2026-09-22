@@ -84,7 +84,7 @@ client.once('ready', async () => {
     }
 });
 
-// --- 6. SOCIAL MEDIA EMBED ENGINE (HIDDEN URL TRICK + NATIVE CARD PLAYER) ---
+// --- 6. SOCIAL MEDIA EMBED ENGINE (COMPLETELY HIDDEN URL CODES) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -103,7 +103,7 @@ client.on('messageCreate', async (message) => {
 
         let videoTitle = "Watch Shared Video Link"; 
 
-        // Auto Title Fetching
+        // Auto Title Fetching from YouTube
         if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
             try {
                 const response = await fetch(`https://noembed.com{encodeURIComponent(targetUrl)}`);
@@ -116,15 +116,15 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // Formats your exact required structure: ## [Video Title](URL)
+        // Formats your precise required structure: ## [Video Title](URL)
         const maskedMarkdownHeader = `## [${videoTitle}](${targetUrl})`;
 
-        // **THE TRICK**: We append the raw link wrapped inside a zero-width spoiler indicator || ||
-        // Discord reads the link to build the big media frame, but hides the raw letters completely from the chat block!
-        const hiddenLinkString = `||${targetUrl}||`;
+        // **COMPLETELY HIDDEN:** Appending the URL wrapped inside <|| ||> blocks 
+        // forces Discord to generate the media frame box layout but ensures the text link is completely hidden.
+        const hiddenLinkPayload = `<||${targetUrl}||>`;
 
-        // 1. Post text header element with the hidden spoiler link payload
-        await message.channel.send({ content: `${maskedMarkdownHeader}\n${hiddenLinkString}` });
+        // 1. Post text header element with the masked layout
+        await message.channel.send({ content: `${maskedMarkdownHeader} ${hiddenLinkPayload}` });
 
         // Generate Unix timing string
         const unixTimestamp = Math.floor(Date.now() / 1000);
