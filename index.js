@@ -271,7 +271,7 @@ client.on('interactionCreate', async (interaction) => {
         const user = interaction.user;
 
         if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
-            return interaction.reply({ content: 'You are already verified.', ephemeral: true });
+return interaction.reply({ content: 'You are already verified.', ephemeral: true });
 }
 const minAgeDays = 7;
 const accountAgeDays = (Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24);
