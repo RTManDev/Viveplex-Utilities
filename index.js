@@ -114,7 +114,7 @@ client.on('threadCreate', async (thread, newlyCreated) => {
 
         for (const t of allThreads) {
             const match = t.name.match(/^BUG-(\d+)/i);
-            if (match) {
+            if (match && match[1]) {
                 const num = parseInt(match[1], 10);
                 if (num > maxBugNumber) maxBugNumber = num;
             }
@@ -138,7 +138,7 @@ client.on('messageCreate', async (message) => {
     const mediaRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|tiktok\.com|twitch\.tv|instagram\.com|twitter\.com|x\.com)\/\S+)/i;
     const match = message.content.match(mediaRegex);
 
-    if (match) {
+    if (match && match[0]) {
         const targetUrl = match[0];
 
         try {
@@ -247,15 +247,15 @@ client.on('interactionCreate', async (interaction) => {
                 const updatedTags = [...currentTags, RESOLVED_TAG_ID].slice(0, 5);
                 await channel.setAppliedTags(updatedTags);
 
-                // Extract "BUG-X" from the thread title (falls back to "Bug Report" if not present)
+                // Extract "BUG-X" from the thread title
                 const bugMatch = channel.name.match(/^(BUG-\d+)/i);
-                const bugLabel = bugMatch ? bugMatch[1].toUpperCase() : "Bug Report";
+                const bugLabel = bugMatch && bugMatch[1] ? bugMatch[1].toUpperCase() : "Bug Report";
 
-                // Build the green-bordered embed matching your reference image
+                // Build the green-bordered embed
                 const updatedEmbed = new EmbedBuilder()
                     .setTitle('Bug Report Updated')
                     .setDescription(`Marked **${bugLabel}** as **Resolved** in <#${channel.id}>.`)
-                    .setColor(0x57F287); // Vibrant Discord green side strip
+                    .setColor(0x57F287);
 
                 await interaction.reply({ embeds: [updatedEmbed] });
             } catch (err) {
@@ -268,8 +268,8 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-// BUTTON: Verify Now
-if (interaction.isButton() && interaction.customId === 'verify_btn') {
+    // BUTTON: Verify Now
+    if (interaction.isButton() && interaction.customId === 'verify_btn') {
 const member = interaction.member;
 const user = interaction.user;
 if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
