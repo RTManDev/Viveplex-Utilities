@@ -6,7 +6,8 @@ const {
     ButtonBuilder, 
     ButtonStyle, 
     REST, 
-    Routes 
+    Routes,
+    PermissionsBitField
 } = require('discord.js');
 const express = require('express');
 
@@ -27,6 +28,10 @@ const GUILD_ID = process.env.GUILD_ID;
 const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
 const MEDIA_CHANNEL_ID = process.env.MEDIA_CHANNEL_ID; 
 
+// Bug Forum Constants
+const BUG_FORUM_ID = '1553615498233778186';
+const RESOLVED_TAG_ID = '1553615891005050890';
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, 
@@ -36,10 +41,16 @@ const client = new Client({
     ]
 });
 
-const commands = [{
-    name: 'verify_channel',
-    description: 'Posts the verification prompt UI.'
-}];
+const commands = [
+    {
+        name: 'verify_channel',
+        description: 'Posts the verification prompt UI.'
+    },
+    {
+        name: 'bug-report',
+        description: 'Marks the current bug report post as resolved (Mod Only).'
+    }
+];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
@@ -68,7 +79,7 @@ function containsHorribleWords(username) {
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
-        console.log(`Bot logged in as ${client.user.tag}.`);
+        console.log(`Bot logged in as ${client.user.tag}. Commands synced.`);
         
         if (SITE_URL && !SITE_URL.includes('undefined')) {
             setInterval(async () => {
@@ -84,7 +95,42 @@ client.once('ready', async () => {
     }
 });
 
-// --- 6. SOCIAL MEDIA EMBED ENGINE (PERFECT INVISIBLE PREVIEW CODES) ---
+// --- 6. AUTO-NUMBERING FOR NEW BUG FORUM POSTS ---
+client.on('threadCreate', async (thread, newlyCreated) => {
+    if (!newlyCreated || thread.parentId !== BUG_FORUM_ID) return;
+    if (/^BUG-\d+\s*-/i.test(thread.name)) return;
+
+    try {
+        const forumChannel = thread.parent;
+        let maxBugNumber = 0;
+
+        const activeThreads = await forumChannel.threads.fetchActive();
+        const archivedThreads = await forumChannel.threads.fetchArchived();
+
+        const allThreads = [
+            ...activeThreads.threads.values(), 
+            ...archivedThreads.threads.values()
+        ];
+
+        for (const t of allThreads) {
+            const match = t.name.match(/^BUG-(\d+)/i);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                if (num > maxBugNumber) maxBugNumber = num;
+            }
+        }
+
+        const nextBugNumber = maxBugNumber + 1;
+        const newTitle = `BUG-${nextBugNumber} - ${thread.name}`.slice(0, 100);
+
+        await thread.setName(newTitle);
+        console.log(`Renamed new bug post to: ${newTitle}`);
+    } catch (err) {
+        console.error('Failed to auto-number forum post (Check Manage Threads permission):', err.message);
+    }
+});
+
+// --- 7. SOCIAL MEDIA EMBED ENGINE ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.channel.id !== MEDIA_CHANNEL_ID) return;
@@ -93,7 +139,7 @@ client.on('messageCreate', async (message) => {
     const match = message.content.match(mediaRegex);
 
     if (match) {
-        const targetUrl = match[1]; // Safely get URL match string
+        const targetUrl = match[0];
 
         try {
             await message.delete();
@@ -103,7 +149,6 @@ client.on('messageCreate', async (message) => {
 
         let videoTitle = "";
 
-        // Safely fetch YouTube Title metadata using official fallback format hooks
         if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
             try {
                 const response = await fetch(`https://noembed.com{encodeURIComponent(targetUrl)}`);
@@ -116,24 +161,16 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // If no title was detected or provided, fallback nicely
         if (!videoTitle) {
             videoTitle = message.content.replace(targetUrl, '').trim() || "Shared Video";
         }
 
-        // --- THE INVISIBLE LINK SYSTEM ---
-        // 1. We create the large title header row using ##
-        // 2. We append a zero-width space hyperlink right next to it: [ ](targetUrl)
-        // This makes the raw URL characters completely disappear while forcing Discord to fetch the preview card player!
-        const invisibleEmbedCode = `[ ](${targetUrl})`;
+        const invisibleEmbedCode = `[ ](${targetUrl})`;
         const finalMessageLayout = `## ${videoTitle}${invisibleEmbedCode}`;
 
-        // Send the title and invisible link anchor code to generate the massive native player layout
         await message.channel.send({ content: finalMessageLayout });
 
-        // Generate Unix timing string
         const unixTimestamp = Math.floor(Date.now() / 1000);
-        // Formats relative time size down to a small header row using ###
         const compactTimestampText = `### <t:${unixTimestamp}:R>`;
 
         const actionRow = new ActionRowBuilder().addComponents(
@@ -143,7 +180,6 @@ client.on('messageCreate', async (message) => {
                 .setStyle(ButtonStyle.Link)
         );
 
-        // Send the small timestamp text and link button directly below the large video block player
         await message.channel.send({
             content: compactTimestampText,
             components: [actionRow]
@@ -151,9 +187,11 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// --- 7. CORE COMMANDS & VERIFICATION MANAGEMENT ---
+// --- 8. SLASH COMMANDS & VERIFICATION HANDLER ---
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
+        
+        // COMMAND 1: /verify_channel (Owner Only)
         if (interaction.commandName === 'verify_channel') {
             if (interaction.user.id !== interaction.guild.ownerId) {
                 return interaction.reply({ 
@@ -175,37 +213,85 @@ client.on('interactionCreate', async (interaction) => {
             );
             await interaction.channel.send({ embeds: [embed], components: [row] });
         }
+
+        // COMMAND 2: /bug-report (Mod Only - Marks post as Resolved with Embed)
+        if (interaction.commandName === 'bug-report') {
+            const isMod = interaction.member.permissions.has(PermissionsBitField.Flags.ManageThreads) || 
+                          interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages);
+
+            if (!isMod) {
+                return interaction.reply({
+                    content: "❌ You need Moderator permissions to use this command.",
+                    ephemeral: true
+                });
+            }
+
+            const channel = interaction.channel;
+            if (!channel.isThread() || channel.parentId !== BUG_FORUM_ID) {
+                return interaction.reply({
+                    content: "❌ This command can only be used inside a post in the Bug Reports forum.",
+                    ephemeral: true
+                });
+            }
+
+            try {
+                const currentTags = channel.appliedTags || [];
+                if (currentTags.includes(RESOLVED_TAG_ID)) {
+                    return interaction.reply({
+                        content: "ℹ️ This bug report is already marked as resolved.",
+                        ephemeral: true
+                    });
+                }
+
+                // Apply the Resolved tag
+                const updatedTags = [...currentTags, RESOLVED_TAG_ID].slice(0, 5);
+                await channel.setAppliedTags(updatedTags);
+
+                // Extract "BUG-X" from the thread title (falls back to "Bug Report" if not present)
+                const bugMatch = channel.name.match(/^(BUG-\d+)/i);
+                const bugLabel = bugMatch ? bugMatch[1].toUpperCase() : "Bug Report";
+
+                // Build the green-bordered embed matching your reference image
+                const updatedEmbed = new EmbedBuilder()
+                    .setTitle('Bug Report Updated')
+                    .setDescription(`Marked **${bugLabel}** as **Resolved** in <#${channel.id}>.`)
+                    .setColor(0x57F287); // Vibrant Discord green side strip
+
+                await interaction.reply({ embeds: [updatedEmbed] });
+            } catch (err) {
+                console.error('Error applying forum tag:', err);
+                await interaction.reply({
+                    content: "❌ Failed to apply the tag. Make sure my Bot role has **Manage Threads** permissions.",
+                    ephemeral: true
+                });
+            }
+        }
     }
 
-    if (interaction.isButton() && interaction.customId === 'verify_btn') {
-        const member = interaction.member;
-        const user = interaction.user;
-
-        if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
-            return interaction.reply({ content: 'You are already verified.', ephemeral: true });
-        }
-
-        const minAgeDays = 7;
-        const accountAgeDays = (Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24);
-        if (accountAgeDays < minAgeDays) {
-            return interaction.reply({ content: `Verification failed. Your account must be at least ${minAgeDays} days old.`, ephemeral: true });
-        }
-
-        const username = user.username.toLowerCase();
-        if (suspiciousKeywords.some(keyword => username.includes(keyword)) || containsHorribleWords(user.username)) {
-            return interaction.reply({ content: 'Verification failed. Security filter restrictions triggered.', ephemeral: true });
-        }
-
-        const role = interaction.guild.roles.cache.get(VERIFIED_ROLE_ID);
-        if (!role) return interaction.reply({ content: 'Role configuration missing.', ephemeral: true });
-
-        try {
-            await member.roles.add(role);
-            await interaction.reply({ content: 'You have been verified.', ephemeral: true });
-        } catch (err) {
-            await interaction.reply({ content: 'Drag Bot role higher in settings.', ephemeral: true });
-        }
-    }
+// BUTTON: Verify Now
+if (interaction.isButton() && interaction.customId === 'verify_btn') {
+const member = interaction.member;
+const user = interaction.user;
+if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
+return interaction.reply({ content: 'You are already verified.', ephemeral: true });
+}
+const minAgeDays = 7;
+const accountAgeDays = (Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24);
+if (accountAgeDays < minAgeDays) {
+return interaction.reply({ content: Verification failed. Your account must be at least ${minAgeDays} days old., ephemeral: true });
+}
+const username = user.username.toLowerCase();
+if (suspiciousKeywords.some(keyword => username.includes(keyword)) || containsHorribleWords(user.username)) {
+return interaction.reply({ content: 'Verification failed. Security filter restrictions triggered.', ephemeral: true });
+}
+const role = interaction.guild.roles.cache.get(VERIFIED_ROLE_ID);
+if (!role) return interaction.reply({ content: 'Role configuration missing.', ephemeral: true });
+try {
+await member.roles.add(role);
+await interaction.reply({ content: 'You have been verified.', ephemeral: true });
+} catch (err) {
+await interaction.reply({ content: 'Drag Bot role higher in settings.', ephemeral: true });
+}
+}
 });
-
 client.login(TOKEN);
