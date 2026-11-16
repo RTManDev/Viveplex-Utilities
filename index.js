@@ -19,7 +19,7 @@ const SITE_URL = process.env.RENDER_EXTERNAL_URL;
 app.get('/', (req, res) => res.status(200).send('Bot is active and healthy!'));
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Web listener securely attached to port ${PORT}`);
+    console.log('Web listener securely attached to port ' + PORT);
 });
 
 // --- 2. CONFIGURATION ---
@@ -79,7 +79,7 @@ function containsHorribleWords(username) {
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
-        console.log(`Bot logged in as ${client.user.tag}. Commands synced.`);
+        console.log('Bot logged in as ' + client.user.tag + '. Commands synced.');
         
         if (SITE_URL && !SITE_URL.includes('undefined')) {
             setInterval(async () => {
@@ -121,12 +121,12 @@ client.on('threadCreate', async (thread, newlyCreated) => {
         }
 
         const nextBugNumber = maxBugNumber + 1;
-        const newTitle = `BUG-${nextBugNumber} - ${thread.name}`.slice(0, 100);
+        const newTitle = ('BUG-' + nextBugNumber + ' - ' + thread.name).slice(0, 100);
 
         await thread.setName(newTitle);
-        console.log(`Renamed new bug post to: ${newTitle}`);
+        console.log('Renamed new bug post to: ' + newTitle);
     } catch (err) {
-        console.error('Failed to auto-number forum post (Check Manage Threads permission):', err.message);
+        console.error('Failed to auto-number forum post:', err.message);
     }
 });
 
@@ -147,11 +147,11 @@ client.on('messageCreate', async (message) => {
             console.error('Missing Manage Messages permission.', err.message);
         }
 
-        let videoTitle = "";
+        let videoTitle = '';
 
         if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
             try {
-                const response = await fetch(`https://noembed.com{encodeURIComponent(targetUrl)}`);
+                const response = await fetch('https://noembed.com' + encodeURIComponent(targetUrl));
                 const data = await response.json();
                 if (data.title) {
                     videoTitle = data.title;
@@ -162,16 +162,16 @@ client.on('messageCreate', async (message) => {
         }
 
         if (!videoTitle) {
-            videoTitle = message.content.replace(targetUrl, '').trim() || "Shared Video";
+            videoTitle = message.content.replace(targetUrl, '').trim() || 'Shared Video';
         }
 
-        const invisibleEmbedCode = `[ ](${targetUrl})`;
-        const finalMessageLayout = `## ${videoTitle}${invisibleEmbedCode}`;
+        const invisibleEmbedCode = '[ ](' + targetUrl + ')';
+        const finalMessageLayout = '## ' + videoTitle + invisibleEmbedCode;
 
         await message.channel.send({ content: finalMessageLayout });
 
         const unixTimestamp = Math.floor(Date.now() / 1000);
-        const compactTimestampText = `### <t:${unixTimestamp}:R>`;
+        const compactTimestampText = '### <t:' + unixTimestamp + ':R>';
 
         const actionRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -195,7 +195,7 @@ client.on('interactionCreate', async (interaction) => {
         if (interaction.commandName === 'verify_channel') {
             if (interaction.user.id !== interaction.guild.ownerId) {
                 return interaction.reply({ 
-                    content: "❌ This setup command can only be executed by the server owner.", 
+                    content: '❌ This setup command can only be executed by the server owner.', 
                     ephemeral: true 
                 });
             }
@@ -221,7 +221,7 @@ client.on('interactionCreate', async (interaction) => {
 
             if (!isMod) {
                 return interaction.reply({
-                    content: "❌ You need Moderator permissions to use this command.",
+                    content: '❌ You need Moderator permissions to use this command.',
                     ephemeral: true
                 });
             }
@@ -229,7 +229,7 @@ client.on('interactionCreate', async (interaction) => {
             const channel = interaction.channel;
             if (!channel.isThread() || channel.parentId !== BUG_FORUM_ID) {
                 return interaction.reply({
-                    content: "❌ This command can only be used inside a post in the Bug Reports forum.",
+                    content: '❌ This command can only be used inside a post in the Bug Reports forum.',
                     ephemeral: true
                 });
             }
@@ -238,30 +238,27 @@ client.on('interactionCreate', async (interaction) => {
                 const currentTags = channel.appliedTags || [];
                 if (currentTags.includes(RESOLVED_TAG_ID)) {
                     return interaction.reply({
-                        content: "ℹ️ This bug report is already marked as resolved.",
+                        content: 'ℹ️ This bug report is already marked as resolved.',
                         ephemeral: true
                     });
                 }
 
-                // Apply the Resolved tag
                 const updatedTags = [...currentTags, RESOLVED_TAG_ID].slice(0, 5);
                 await channel.setAppliedTags(updatedTags);
 
-                // Extract "BUG-X" from the thread title
                 const bugMatch = channel.name.match(/^(BUG-\d+)/i);
-                const bugLabel = bugMatch && bugMatch[1] ? bugMatch[1].toUpperCase() : "Bug Report";
+                const bugLabel = bugMatch && bugMatch[1] ? bugMatch[1].toUpperCase() : 'Bug Report';
 
-                // Build the green-bordered embed
                 const updatedEmbed = new EmbedBuilder()
                     .setTitle('Bug Report Updated')
-                    .setDescription(`Marked **${bugLabel}** as **Resolved** in <#${channel.id}>.`)
+                    .setDescription('Marked **' + bugLabel + '** as **Resolved** in <#' + channel.id + '>.')
                     .setColor(0x57F287);
 
                 await interaction.reply({ embeds: [updatedEmbed] });
             } catch (err) {
                 console.error('Error applying forum tag:', err);
                 await interaction.reply({
-                    content: "❌ Failed to apply the tag. Make sure my Bot role has **Manage Threads** permissions.",
+                    content: '❌ Failed to apply the tag. Make sure my Bot role has **Manage Threads** permissions.',
                     ephemeral: true
                 });
             }
@@ -270,15 +267,19 @@ client.on('interactionCreate', async (interaction) => {
 
     // BUTTON: Verify Now
     if (interaction.isButton() && interaction.customId === 'verify_btn') {
-const member = interaction.member;
-const user = interaction.user;
-if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
-return interaction.reply({ content: 'You are already verified.', ephemeral: true });
+        const member = interaction.member;
+        const user = interaction.user;
+
+        if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
+            return interaction.reply({ content: 'You are already verified.', ephemeral: true });
 }
 const minAgeDays = 7;
 const accountAgeDays = (Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24);
 if (accountAgeDays < minAgeDays) {
-return interaction.reply({ content: Verification failed. Your account must be at least ${minAgeDays} days old., ephemeral: true });
+return interaction.reply({
+content: 'Verification failed. Your account must be at least ' + minAgeDays + ' days old.',
+ephemeral: true
+});
 }
 const username = user.username.toLowerCase();
 if (suspiciousKeywords.some(keyword => username.includes(keyword)) || containsHorribleWords(user.username)) {
